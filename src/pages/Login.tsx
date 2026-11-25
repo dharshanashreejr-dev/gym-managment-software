@@ -1,21 +1,14 @@
-import { useState, useEffect, useRef, FormEvent, MouseEvent } from 'react'
+
+import { useState, useEffect, useRef } from 'react'
+import type { FormEvent, MouseEvent } from 'react'
 import { useNavigate, Navigate, Link } from 'react-router-dom'
 import { useAuth } from '../context/Auth'
 import { users } from '../data/mock'
 
-/**
- * Muscle & Hustle — Login
- * Drop-in replacement for src/pages/Login.tsx (self-contained: styles are embedded below).
- *
- * No vector art / SVG anywhere. The visuals are built from:
- *  - a CSS-built barbell that gets LOADED WITH PLATES as you fill in the form
- *  - a swinging member-access pass (lanyard, punch hole, barcode) as the login card
- *  - clean plain gradient background (no floating particles)
- */
-
-const PLATES = [20, 20, 15, 10, 5, 2.5] // kg per side, heaviest sits closest to the centre
+const PLATES = [20, 20, 15, 10, 5, 2.5]
 const BARCODE = [2,1,3,1,1,2,4,1,2,1,3,2,1,1,4,2,1,3,1,2,2,1,1,3,2,4,1,2,1,1,3,1,2,2,1,4,1,2,3,1,2,1]
 const TICKER = ['Members', 'Payments', 'Attendance', 'Trainers', 'Classes', 'Reports']
+
 const QUOTES = [
   'A well-run gym changes lives, one member at a time.',
   'Track every member. Retain every member.',
@@ -34,6 +27,7 @@ const stage = (n: number) =>
 export default function Login() {
   const { user, login } = useAuth()
   const go = useNavigate()
+
   const [email, setEmail] = useState('')
   const [pw, setPw] = useState('')
   const [err, setErr] = useState('')
@@ -43,131 +37,244 @@ export default function Login() {
   const [now, setNow] = useState(() => new Date())
   const [kg, setKg] = useState(20)
   const [qi, setQi] = useState(0)
-  const fitRef = useRef<HTMLDivElement>(null)
 
+  const fitRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const tiltRef = useRef<HTMLDivElement>(null)
+  const submitTimer = useRef<number | null>(null)
+  const failTimer = useRef<number | null>(null)
 
-  // how many plates are on each side
   const loaded =
-    !email && !pw ? 0 : Math.min(PLATES.length, Math.ceil(email.length / 7) + Math.floor(pw.length / 2))
-  const targetKg = 20 + 2 * PLATES.slice(0, loaded).reduce((a, b) => a + b, 0)
+    !email && !pw
+      ? 0
+      : Math.min(
+          PLATES.length,
+          Math.ceil(email.length / 7) + Math.floor(pw.length / 2)
+        )
 
-  // clock
+  const targetKg =
+    20 + 2 * PLATES.slice(0, loaded).reduce((a, b) => a + b, 0)
+
+  // Clock
   useEffect(() => {
-    const t = window.setInterval(() => setNow(new Date()), 30000)
-    return () => window.clearInterval(t)
+    const timer = window.setInterval(() => {
+      setNow(new Date())
+    }, 30000)
+
+    return () => window.clearInterval(timer)
   }, [])
 
-  // rotate the gym quotes
+  // Rotating quotes
   useEffect(() => {
-    const t = window.setInterval(() => setQi(i => (i + 1) % QUOTES.length), 6000)
-    return () => window.clearInterval(t)
+    const timer = window.setInterval(() => {
+      setQi(i => (i + 1) % QUOTES.length)
+    }, 6000)
+
+    return () => window.clearInterval(timer)
   }, [])
 
-  // fit everything into ONE screen: no page scroll, no side scroll bar
+  // Responsive screen fitting
   useEffect(() => {
     const fit = () => {
       const root = rootRef.current
       if (!root) return
+
+      const el = fitRef.current
+
+      // Do not apply desktop scaling on mobile/tablet
+      if (window.innerWidth <= 980) {
+        root.style.setProperty('--bs', '1')
+        if (el) el.style.transform = 'none'
+        return
+      }
+
       const h = window.innerHeight
       const w = window.innerWidth
-      const bs = Math.max(0.42, Math.min(1, h / 900, w / 1400 + 0.15))
+
+      const bs = Math.max(
+        0.42,
+        Math.min(1, h / 900, w / 1400 + 0.15)
+      )
+
       root.style.setProperty('--bs', String(bs))
-      const el = fitRef.current
+
       if (el) {
         el.style.transform = 'none'
-        const nat = el.offsetHeight
-        const s = Math.max(0.55, Math.min(1, (h - 24) / nat))
-        el.style.transform = `scale(${s})`
+
+        const naturalHeight = el.offsetHeight
+        const scale = Math.max(
+          0.55,
+          Math.min(1, (h - 24) / naturalHeight)
+        )
+
+        el.style.transform = `scale(${scale})`
       }
     }
+
     fit()
-    const t = window.setTimeout(fit, 60)
+
+    const timer = window.setTimeout(fit, 60)
     window.addEventListener('resize', fit)
-    return () => { window.clearTimeout(t); window.removeEventListener('resize', fit) }
+
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('resize', fit)
+    }
   }, [])
 
-  // tween the kg read-out
+  // Animated weight readout
   useEffect(() => {
     let raf = 0
-    const step = () => {
-      setKg(cur => {
-        const d = targetKg - cur
-        if (Math.abs(d) < 0.6) return targetKg
-        raf = requestAnimationFrame(step)
-        return cur + d * 0.16
+
+    const animate = () => {
+      setKg(current => {
+        const difference = targetKg - current
+
+        if (Math.abs(difference) < 0.6) {
+          return targetKg
+        }
+
+        return current + difference * 0.16
       })
+
+      raf = requestAnimationFrame(animate)
     }
-    raf = requestAnimationFrame(step)
+
+    raf = requestAnimationFrame(animate)
+
     return () => cancelAnimationFrame(raf)
   }, [targetKg])
 
-  if (user) return <Navigate to="/" replace />
+  // Cleanup pending timers
+  useEffect(() => {
+    return () => {
+      if (submitTimer.current !== null) {
+        window.clearTimeout(submitTimer.current)
+      }
 
-  const submit = (e: FormEvent) => {
+      if (failTimer.current !== null) {
+        window.clearTimeout(failTimer.current)
+      }
+    }
+  }, [])
+
+  if (user) {
+    return <Navigate to="/" replace />
+  }
+
+  // Login submit
+  const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+
     if (loading) return
+
     setErr('')
     setLoading(true)
-    window.setTimeout(() => {
-      if (login(email, pw)) {
-        go('/')
+
+    submitTimer.current = window.setTimeout(() => {
+      const success = login(email, pw)
+
+      if (success) {
+        go('/', { replace: true })
       } else {
         setLoading(false)
         setErr('Email or password is incorrect. Use one of the demo passes below.')
         setFail(true)
-        window.setTimeout(() => setFail(false), 800)
+
+        failTimer.current = window.setTimeout(() => {
+          setFail(false)
+        }, 800)
       }
     }, 750)
   }
 
+  // Background parallax
   const onMove = (e: MouseEvent<HTMLDivElement>) => {
     const root = rootRef.current
+
     if (root) {
       const nx = e.clientX / window.innerWidth - 0.5
       const ny = e.clientY / window.innerHeight - 0.5
+
       root.style.setProperty('--mx', String(nx))
       root.style.setProperty('--my', String(ny))
     }
   }
+
+  // Login card tilt
   const tilt = (e: MouseEvent<HTMLDivElement>) => {
+    if (window.innerWidth <= 980) return
+
     const el = tiltRef.current
     if (!el) return
-    const r = el.getBoundingClientRect()
-    const x = (e.clientX - r.left) / r.width - 0.5
-    const y = (e.clientY - r.top) / r.height - 0.5
-    el.style.transform = `perspective(1100px) rotateY(${x * 7}deg) rotateX(${-y * 6}deg)`
+
+    const rect = el.getBoundingClientRect()
+
+    const x = (e.clientX - rect.left) / rect.width - 0.5
+    const y = (e.clientY - rect.top) / rect.height - 0.5
+
+    el.style.transform =
+      `perspective(1100px) rotateY(${x * 7}deg) rotateX(${-y * 6}deg)`
   }
-  const untilt = () => { if (tiltRef.current) tiltRef.current.style.transform = '' }
+
+  const untilt = () => {
+    if (tiltRef.current) {
+      tiltRef.current.style.transform = ''
+    }
+  }
 
   const hour = now.getHours()
-  const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
-  const clock = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
 
-  const leftPlates = PLATES.slice(0, loaded).map((p, i) => ({ p, i })).reverse()
-  const rightPlates = PLATES.slice(0, loaded).map((p, i) => ({ p, i }))
+  const greet =
+    hour < 12
+      ? 'Good morning'
+      : hour < 17
+        ? 'Good afternoon'
+        : 'Good evening'
+
+  const clock = now.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  const leftPlates = PLATES
+    .slice(0, loaded)
+    .map((p, i) => ({ p, i }))
+    .reverse()
+
+  const rightPlates = PLATES
+    .slice(0, loaded)
+    .map((p, i) => ({ p, i }))
+
   const barState = loading ? 'lift' : fail ? 'drop' : 'idle'
 
   return (
     <div className="mhx" ref={rootRef} onMouseMove={onMove}>
       <style>{CSS}</style>
 
-      {/* ───────────── LEFT · THE STAGE ───────────── */}
-      <section className="mhx-stage" aria-hidden>
+      {/* LEFT - THE STAGE */}
+      <section className="mhx-stage" aria-hidden="true">
         <div className="mhx-spot" />
 
         <header className="mhx-top">
-          <div className="mhx-mark">M<span>&amp;</span>H</div>
+          <div className="mhx-mark">
+            M<span>&amp;</span>H
+          </div>
+
           <div className="mhx-top-meta">
             <b>Muscle &amp; Hustle</b>
             <i>Gym Studio · Coimbatore</i>
           </div>
-          <div className="mhx-clock"><em />Open · {clock}</div>
+
+          <div className="mhx-clock">
+            <em />
+            Open · {clock}
+          </div>
         </header>
 
         <div className="mhx-headline">
           <span className="mhx-greet">{greet}.</span>
+
           <h1>
             <span className="o o1">Earn</span>
             <span className="o o2">your</span>
@@ -175,10 +282,14 @@ export default function Login() {
           </h1>
         </div>
 
-        {/* the barbell — built only from divs */}
+        {/* BARBELL */}
         <div className="mhx-rig">
           <div className="mhx-readout">
-            <div className="mhx-kg"><b>{Math.round(kg)}</b><small>kg</small></div>
+            <div className="mhx-kg">
+              <b>{Math.round(kg)}</b>
+              <small>kg</small>
+            </div>
+
             <div className="mhx-state">
               <span>On the bar</span>
               <strong>{stage(loaded)}</strong>
@@ -190,28 +301,48 @@ export default function Login() {
               <div className="mhx-barbell">
                 <div className="mhx-rod" />
                 <div className="mhx-shaft" />
+
                 <div className="mhx-zone l">
                   <span className="mhx-collar" />
+
                   {leftPlates.map(({ p, i }) => (
-                    <span key={i} className={`mhx-plate ${plateClass(p)}`} style={{ ['--h' as string]: `${46 + p * 5.2}px` }}>
+                    <span
+                      key={i}
+                      className={`mhx-plate ${plateClass(p)}`}
+                      style={{
+                        ['--h' as string]: `${46 + p * 5.2}px`,
+                      }}
+                    >
                       <em>{p}</em>
                     </span>
                   ))}
                 </div>
+
                 <div className="mhx-zone r">
                   <span className="mhx-collar" />
+
                   {rightPlates.map(({ p, i }) => (
-                    <span key={i} className={`mhx-plate ${plateClass(p)}`} style={{ ['--h' as string]: `${46 + p * 5.2}px` }}>
+                    <span
+                      key={i}
+                      className={`mhx-plate ${plateClass(p)}`}
+                      style={{
+                        ['--h' as string]: `${46 + p * 5.2}px`,
+                      }}
+                    >
                       <em>{p}</em>
                     </span>
                   ))}
                 </div>
               </div>
             </div>
+
             <div className="mhx-platform" />
             <div className="mhx-platform-glow" />
           </div>
-          <p className="mhx-hint">Fill in your details — the bar loads as you go.</p>
+
+          <p className="mhx-hint">
+            Fill in your details — the bar loads as you go.
+          </p>
         </div>
 
         <figure className="mhx-quote" key={qi}>
@@ -221,102 +352,168 @@ export default function Login() {
         <div className="mhx-ticker">
           <div className="mhx-ticker-track">
             {[...TICKER, ...TICKER, ...TICKER, ...TICKER].map((t, i) => (
-              <span key={i}>{t}<i /></span>
+              <span key={i}>
+                {t}
+                <i />
+              </span>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ───────────── RIGHT · THE ACCESS PASS ───────────── */}
+      {/* RIGHT - ACCESS PASS */}
       <section className="mhx-side">
         <div className="mhx-fit" ref={fitRef}>
-        <div className="mhx-swing" onMouseMove={tilt} onMouseLeave={untilt}>
-          <div className="mhx-strap"><span>MUSCLE &amp; HUSTLE · MUSCLE &amp; HUSTLE · MUSCLE &amp; HUSTLE</span></div>
-          <div className="mhx-clip" />
+          <div
+            className="mhx-swing"
+            onMouseMove={tilt}
+            onMouseLeave={untilt}
+          >
+            <div className="mhx-strap">
+              <span>
+                MUSCLE &amp; HUSTLE · MUSCLE &amp; HUSTLE · MUSCLE &amp; HUSTLE
+              </span>
+            </div>
 
-          <div className="mhx-tilt" ref={tiltRef}>
-            <form className={`mhx-pass ${fail ? 'shake' : ''}`} onSubmit={submit}>
-              <div className="mhx-hole" />
+            <div className="mhx-clip" />
 
-              <div className="mhx-pass-head">
-                <span>Member access pass</span>
-                <b>No. MH-0427</b>
-              </div>
+            <div className="mhx-tilt" ref={tiltRef}>
+              <form
+                className={`mhx-pass ${fail ? 'shake' : ''}`}
+                onSubmit={submit}
+              >
+                <div className="mhx-hole" />
 
-              <div className="mhx-pass-body">
-                <h2>Check in</h2>
-                <p className="mhx-lead">Sign in with your studio account to continue.</p>
+                <div className="mhx-pass-head">
+                  <span>Member access pass</span>
+                  <b>No. MH-0427</b>
+                </div>
 
-                <label htmlFor="mhx-email">Email</label>
-                <input
-                  id="mhx-email"
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  required
-                  autoComplete="username"
-                  placeholder="you@studio.com"
-                />
+                <div className="mhx-pass-body">
+                  <h2>Check in</h2>
 
-                <label htmlFor="mhx-pw">Password</label>
-                <div className="mhx-pwrow">
+                  <p className="mhx-lead">
+                    Sign in with your studio account to continue.
+                  </p>
+
+                  <label htmlFor="mhx-email">Email</label>
+
                   <input
-                    id="mhx-pw"
-                    type={show ? 'text' : 'password'}
-                    value={pw}
-                    onChange={e => setPw(e.target.value)}
+                    id="mhx-email"
+                    type="email"
+                    value={email}
+                    onChange={e => {
+                      setEmail(e.target.value)
+                      setErr('')
+                    }}
                     required
-                    autoComplete="current-password"
-                    placeholder="••••••••"
+                    autoComplete="username"
+                    placeholder="you@studio.com"
                   />
-                  <button type="button" className="mhx-eye" onClick={() => setShow(s => !s)}>
-                    {show ? 'Hide' : 'Show'}
+
+                  <label htmlFor="mhx-pw">Password</label>
+
+                  <div className="mhx-pwrow">
+                    <input
+                      id="mhx-pw"
+                      type={show ? 'text' : 'password'}
+                      value={pw}
+                      onChange={e => {
+                        setPw(e.target.value)
+                        setErr('')
+                      }}
+                      required
+                      autoComplete="current-password"
+                      placeholder="••••••••"
+                    />
+
+                    <button
+                      type="button"
+                      className="mhx-eye"
+                      onClick={() => setShow(s => !s)}
+                    >
+                      {show ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+
+                  <div className="mhx-row">
+                    <Link to="/forgot-password">
+                      Forgot password?
+                    </Link>
+                  </div>
+
+                  {err && (
+                    <p className="mhx-err" role="alert">
+                      {err}
+                    </p>
+                  )}
+
+                  <button
+                    type="submit"
+                    className="mhx-submit"
+                    disabled={loading}
+                  >
+                    <span className="mhx-submit-fill" />
+
+                    <span className="mhx-submit-label">
+                      {loading ? 'Lifting…' : 'Check in'}
+                    </span>
+
+                    <span className="mhx-submit-arrow">→</span>
                   </button>
                 </div>
 
-                <div className="mhx-row">
-                  <Link to="/forgot-password">Forgot password?</Link>
+                <div className="mhx-perf">
+                  <i />
+                  <hr />
+                  <i />
                 </div>
 
-                {err && <p className="mhx-err" role="alert">{err}</p>}
+                <div className="mhx-pass-foot">
+                  <p>Demo passes — tap to fill</p>
 
-                <button className="mhx-submit" disabled={loading}>
-                  <span className="mhx-submit-fill" />
-                  <span className="mhx-submit-label">{loading ? 'Lifting…' : 'Check in'}</span>
-                  <span className="mhx-submit-arrow">→</span>
-                </button>
-              </div>
+                  <div className="mhx-demo">
+                    {users.map(u => (
+                      <button
+                        type="button"
+                        key={u.id}
+                        onClick={() => {
+                          setEmail(u.email)
+                          setPw(u.password)
+                          setErr('')
+                        }}
+                      >
+                        <span>{u.role}</span>
+                        <small>{u.name}</small>
+                      </button>
+                    ))}
+                  </div>
 
-              <div className="mhx-perf"><i /><hr /><i /></div>
+                  <div className="mhx-barcode" aria-hidden="true">
+                    {BARCODE.map((w, i) => (
+                      <i
+                        key={i}
+                        style={{
+                          width: w * 2,
+                          marginRight: i % 3 === 0 ? 3 : 2,
+                        }}
+                      />
+                    ))}
+                  </div>
 
-              <div className="mhx-pass-foot">
-                <p>Demo passes — tap to fill</p>
-                <div className="mhx-demo">
-                  {users.map(u => (
-                    <button
-                      type="button"
-                      key={u.id}
-                      onClick={() => { setEmail(u.email); setPw(u.password); setErr('') }}
-                    >
-                      <span>{u.role}</span>
-                      <small>{u.name}</small>
-                    </button>
-                  ))}
+                  <div className="mhx-code">
+                    MH · STUDIO · COIMBATORE
+                  </div>
                 </div>
-
-                <div className="mhx-barcode" aria-hidden>
-                  {BARCODE.map((w, i) => <i key={i} style={{ width: w * 2, marginRight: (i % 3 === 0 ? 3 : 2) }} />)}
-                </div>
-                <div className="mhx-code">MH · STUDIO · COIMBATORE</div>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
-        </div>
         </div>
       </section>
     </div>
   )
 }
+
 
 const CSS = `
 .mhx{
@@ -589,10 +786,65 @@ const CSS = `
 .mhx-code{margin-top:.3rem; font-size:.6rem; letter-spacing:.28em; color:#4F4768; font-weight:600}
 
 /* ===== responsive: on small screens only the pass shows, still one screen ===== */
+
 @media (max-width:980px){
-  .mhx-stage{display:none}
-  .mhx-side{border-left:0}
+  .mhx {
+    min-height: 100dvh;
+    height: auto;
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  .mhx-stage {
+    display: flex;
+    min-height: 420px;
+    height: auto;
+    padding: 1.5rem 1.25rem;
+  }
+
+  .mhx-headline h1 {
+    font-size: clamp(2.5rem, 12vw, 4.5rem);
+  }
+
+  .mhx-rig {
+    margin: 2rem 0;
+  }
+
+  .mhx-side {
+    min-height: 760px;
+    height: auto;
+    padding: 5rem 1rem 2rem;
+    border-left: 0;
+    overflow: visible;
+  }
+
+  .mhx-fit {
+    max-width: 26.5rem;
+    padding-top: 0;
+    transform: none !important;
+  }
 }
+
+@media (max-width:480px) {
+  .mhx-stage {
+    min-height: 380px;
+  }
+
+  .mhx-clock {
+    font-size: .65rem;
+    padding: .4rem .55rem;
+  }
+
+  .mhx-top-meta b {
+    font-size: .95rem;
+  }
+
+  .mhx-side {
+    padding-left: .75rem;
+    padding-right: .75rem;
+  }
+}
+
 
 @media (prefers-reduced-motion: reduce){
   .mhx *, .mhx-swing{animation:none !important; transition:none !important}
