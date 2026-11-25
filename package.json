@@ -1,3 +1,4 @@
+
 {
   "name": "muscle-hustle-gym",
   "private": true,
@@ -5,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npx tsc --noEmit && vite build",
+    "build": "node ./node_modules/typescript/bin/tsc --noEmit && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
