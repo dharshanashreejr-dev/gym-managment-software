@@ -87,7 +87,14 @@ export default function Attendance() {
   const periodRows = useMemo(() => {
     const filtered = attendance.filter(a => inPeriod(a.date, period))
     // Group by member for weekly/monthly summary
-    if (period === 'daily') return filtered.map(a => ({ ...a, visits: 1 }))
+    if (period === 'daily') {
+  return filtered.map(a => ({
+    ...a,
+    visits: 1,
+    lastIn: a.checkIn,
+    lastOut: a.checkOut,
+  }))
+}
     const map = new Map<string, { memberId: string; memberName: string; visits: number; lastIn: string; lastOut?: string }>()
     for (const a of filtered) {
       const cur = map.get(a.memberId)
